@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard MailerLite - Objectif 20K</title>
+    <title>Système Viral - Acquisation Tracking</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
@@ -277,12 +277,105 @@
             position: relative;
             height: 300px;
         }
+
+        .login-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-container.active {
+            display: flex;
+        }
+
+        .login-box {
+            background: rgba(20, 20, 20, 0.95);
+            border-radius: 24px;
+            padding: 50px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5),
+                        0 0 100px rgba(1, 243, 142, 0.1);
+            border: 1px solid rgba(1, 243, 142, 0.2);
+            backdrop-filter: blur(10px);
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .login-title {
+            font-size: 28px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #01F38E 0%, #00C896 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .login-subtitle {
+            text-align: center;
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .login-input {
+            width: 100%;
+            padding: 15px;
+            background: rgba(30, 30, 30, 0.8);
+            border: 1px solid rgba(1, 243, 142, 0.2);
+            border-radius: 12px;
+            color: #fff;
+            font-size: 16px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .login-input:focus {
+            outline: none;
+            border-color: rgba(1, 243, 142, 0.5);
+            box-shadow: 0 0 20px rgba(1, 243, 142, 0.2);
+        }
+
+        .login-error {
+            color: #ff6b6b;
+            font-size: 14px;
+            text-align: center;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .login-error.show {
+            display: block;
+        }
+
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
+    <!-- Page de connexion -->
+    <div id="loginContainer" class="login-container active">
+        <div class="login-box">
+            <h1 class="login-title">Système Viral - Acquisation Tracking</h1>
+            <p class="login-subtitle">Veuillez entrer le mot de passe pour accéder</p>
+            <input type="password" id="passwordInput" class="login-input" placeholder="Mot de passe" autocomplete="off">
+            <div id="loginError" class="login-error">Mot de passe incorrect</div>
+            <button class="refresh-btn" onclick="checkPassword()" style="width: 100%; margin-top: 10px;">Connexion</button>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboardContainer" class="container hidden">
         <div class="dashboard">
-            <h1 class="title">Dashboard Emails</h1>
+            <h1 class="title">Système Viral - Acquisation Tracking</h1>
             <p class="subtitle">Objectif: 20,000 emails</p>
             
             <div id="content">
@@ -296,6 +389,58 @@
 
     <script>
         const GOAL = 20000;
+        const PASSWORD = '2615';
+
+        // Vérifier si l'utilisateur est déjà authentifié
+        function isAuthenticated() {
+            return sessionStorage.getItem('authenticated') === 'true';
+        }
+
+        // Vérifier le mot de passe
+        function checkPassword() {
+            const passwordInput = document.getElementById('passwordInput');
+            const loginError = document.getElementById('loginError');
+            const loginContainer = document.getElementById('loginContainer');
+            const dashboardContainer = document.getElementById('dashboardContainer');
+
+            if (passwordInput.value === PASSWORD) {
+                sessionStorage.setItem('authenticated', 'true');
+                loginContainer.classList.remove('active');
+                dashboardContainer.classList.remove('hidden');
+                // Charger le dashboard
+                updateDashboard();
+                // Démarrer l'actualisation automatique
+                startAutoRefresh();
+            } else {
+                loginError.classList.add('show');
+                passwordInput.value = '';
+                setTimeout(() => {
+                    loginError.classList.remove('show');
+                }, 3000);
+            }
+        }
+
+        // Permettre la connexion avec Enter
+        document.addEventListener('DOMContentLoaded', function() {
+            const passwordInput = document.getElementById('passwordInput');
+            if (passwordInput) {
+                passwordInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        checkPassword();
+                    }
+                });
+            }
+
+            // Si déjà authentifié, afficher le dashboard
+            if (isAuthenticated()) {
+                const loginContainer = document.getElementById('loginContainer');
+                const dashboardContainer = document.getElementById('dashboardContainer');
+                loginContainer.classList.remove('active');
+                dashboardContainer.classList.remove('hidden');
+                updateDashboard();
+                startAutoRefresh();
+            }
+        });
 
         // Appel à la fonction Netlify serverless qui utilise les variables d'environnement
         async function fetchSubscriberCount() {
@@ -588,11 +733,24 @@
             }
         }
 
-        // Charger les données au démarrage
-        updateDashboard();
+        // Actualisation automatique toutes les 5 minutes (seulement si authentifié)
+        let refreshInterval = null;
         
-        // Actualisation automatique toutes les 5 minutes
-        setInterval(updateDashboard, 5 * 60 * 1000);
+        function startAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+            refreshInterval = setInterval(() => {
+                if (isAuthenticated()) {
+                    updateDashboard();
+                }
+            }, 5 * 60 * 1000);
+        }
+        
+        // Démarrer l'actualisation automatique si déjà authentifié
+        if (isAuthenticated()) {
+            startAutoRefresh();
+        }
     </script>
 </body>
 </html>
