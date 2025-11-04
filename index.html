@@ -432,14 +432,24 @@
         // Rendre la fonction accessible globalement
         window.checkPassword = checkPassword;
 
-        // Permettre la connexion avec Enter
+        // Permettre la connexion avec Enter et attacher le bouton
         document.addEventListener('DOMContentLoaded', function() {
             const passwordInput = document.getElementById('passwordInput');
+            const loginButton = document.querySelector('.login-box button');
+            
             if (passwordInput) {
                 passwordInput.addEventListener('keypress', function(e) {
                     if (e.key === 'Enter') {
                         checkPassword();
                     }
+                });
+            }
+
+            // Attacher l'événement click au bouton
+            if (loginButton) {
+                loginButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    checkPassword();
                 });
             }
 
