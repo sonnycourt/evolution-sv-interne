@@ -368,16 +368,22 @@
             history[todayKey] = subscriberCount;
             localStorage.setItem('emailHistory', JSON.stringify(history));
 
-            // Calculer les dates pour les 7 derniers jours + aujourd'hui
+            // Période fixe : du 4 novembre 2025 au 4 décembre 2025
+            const startDate = new Date('2025-11-04T00:00:00');
+            const endDate = new Date('2025-12-04T22:00:00');
+            const today = new Date();
+            
             const labels = [];
             const targetData = []; // Objectif quotidien (ligne grise)
             const actualData = []; // Réel quotidien (ligne verte)
 
+            // Calculer le nombre total de jours dans la période
+            const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
             const dailyTarget = daysToGoal > 0 ? Math.ceil(remaining / daysToGoal) : 0;
 
-            // Générer les 7 derniers jours + aujourd'hui
-            for (let i = -7; i <= 0; i++) {
-                const date = new Date(today);
+            // Générer toutes les dates de la période
+            for (let i = 0; i < totalDays; i++) {
+                const date = new Date(startDate);
                 date.setDate(date.getDate() + i);
                 const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                 const dateLabel = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -392,8 +398,31 @@
                 prevDate.setDate(prevDate.getDate() - 1);
                 const prevKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-${String(prevDate.getDate()).padStart(2, '0')}`;
                 
-                const currentCount = history[dateKey] || (i === 0 ? subscriberCount : 0);
-                const prevCount = history[prevKey] || (i === -7 ? currentCount : 0);
+                // Si c'est aujourd'hui ou une date future, utiliser le nombre actuel
+                const isToday = dateKey === todayKey;
+                const isPast = date < today;
+                
+                // Récupérer le nombre d'emails pour ce jour
+                let currentCount = 0;
+                if (isToday) {
+                    currentCount = subscriberCount;
+                } else if (isPast && history[dateKey]) {
+                    currentCount = history[dateKey];
+                } else if (!isPast) {
+                    // Date future : pas encore de données
+                    currentCount = 0;
+                }
+                
+                // Calculer le nombre d'emails du jour précédent
+                let prevCount = 0;
+                if (i > 0) {
+                    // Récupérer le nombre du jour précédent
+                    if (prevKey === todayKey) {
+                        prevCount = subscriberCount;
+                    } else if (history[prevKey]) {
+                        prevCount = history[prevKey];
+                    }
+                }
                 
                 // Calculer le nombre d'emails collectés ce jour-là
                 const dailyGrowth = Math.max(0, currentCount - prevCount);
@@ -521,7 +550,7 @@
                     </div>
                     
                     <div class="chart-container">
-                        <div class="chart-title">Emails par jour (7 derniers jours)</div>
+                        <div class="chart-title">Emails par jour (4 novembre - 4 décembre 2025)</div>
                         <div class="chart-wrapper">
                             <canvas id="dailyChart"></canvas>
                         </div>
