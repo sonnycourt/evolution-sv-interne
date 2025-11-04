@@ -301,14 +301,15 @@
             return num.toLocaleString('fr-FR');
         }
 
-        function calculateDailyGrowth(current) {
-            // Simulation d'une croissance quotidienne
-            return Math.floor(Math.random() * 50 + 10);
-        }
-
-        function calculateDaysToGoal(current, dailyGrowth) {
-            const remaining = GOAL - current;
-            return Math.ceil(remaining / dailyGrowth);
+        function calculateDaysToGoal() {
+            // Date de fin fixe : 4 décembre 2025 à 22h
+            const endDate = new Date('2025-12-04T22:00:00');
+            const now = new Date();
+            const diffTime = endDate - now;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            // Retourner 0 si la date est déjà passée, sinon le nombre de jours restants
+            return Math.max(0, diffDays);
         }
 
         async function updateDashboard() {
@@ -318,8 +319,7 @@
                 const subscriberCount = await fetchSubscriberCount();
                 const percentage = Math.min((subscriberCount / GOAL) * 100, 100);
                 const remaining = GOAL - subscriberCount;
-                const dailyGrowth = calculateDailyGrowth(subscriberCount);
-                const daysToGoal = calculateDaysToGoal(subscriberCount, dailyGrowth);
+                const daysToGoal = calculateDaysToGoal();
                 
                 contentDiv.innerHTML = `
                     <div class="stats-container">
