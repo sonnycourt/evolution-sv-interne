@@ -381,18 +381,18 @@
         let chartInstance = null;
 
         function createChart(subscriberCount, remaining, daysToGoal) {
-            const history = getDailyHistory();
-            const today = new Date();
-            const todayKey = getTodayKey();
-            
-            // Sauvegarder le nombre actuel pour aujourd'hui
-            history[todayKey] = subscriberCount;
-            localStorage.setItem('emailHistory', JSON.stringify(history));
+            try {
+                const history = getDailyHistory();
+                const today = new Date();
+                const todayKey = getTodayKey();
+                
+                // Sauvegarder le nombre actuel pour aujourd'hui
+                history[todayKey] = subscriberCount;
+                localStorage.setItem('emailHistory', JSON.stringify(history));
 
-            // Période fixe : du 4 novembre 2025 au 4 décembre 2025
-            const startDate = new Date('2025-11-04T00:00:00');
-            const endDate = new Date('2025-12-04T22:00:00');
-            const today = new Date();
+                // Période fixe : du 4 novembre 2025 au 4 décembre 2025
+                const startDate = new Date('2025-11-04T00:00:00');
+                const endDate = new Date('2025-12-04T22:00:00');
             
             const labels = [];
             const targetData = []; // Objectif quotidien (ligne grise)
@@ -450,15 +450,24 @@
                 actualData.push(dailyGrowth);
             }
 
-            const ctx = document.getElementById('dailyChart');
-            if (!ctx) return;
+                const ctx = document.getElementById('dailyChart');
+                if (!ctx) {
+                    console.warn('Canvas dailyChart non trouvé');
+                    return;
+                }
 
-            // Détruire le graphique précédent s'il existe
-            if (chartInstance) {
-                chartInstance.destroy();
-            }
+                // Vérifier que Chart est disponible
+                if (typeof Chart === 'undefined') {
+                    console.error('Chart.js n\'est pas chargé');
+                    return;
+                }
 
-            chartInstance = new Chart(ctx, {
+                // Détruire le graphique précédent s'il existe
+                if (chartInstance) {
+                    chartInstance.destroy();
+                }
+
+                chartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
@@ -529,6 +538,9 @@
                     }
                 }
             });
+            } catch (error) {
+                console.error('Erreur lors de la création du graphique:', error);
+            }
         }
 
         async function updateDashboard() {
@@ -598,7 +610,11 @@
                 
                 // Créer le graphique après un court délai pour s'assurer que le canvas est rendu
                 setTimeout(() => {
-                    createChart(subscriberCount, remaining, daysToGoal);
+                    try {
+                        createChart(subscriberCount, remaining, daysToGoal);
+                    } catch (error) {
+                        console.error('Erreur lors de la création du graphique:', error);
+                    }
                 }, 200);
                 
             } catch (error) {
@@ -617,6 +633,9 @@
                 `;
             }
         }
+
+        // Rendre la fonction accessible globalement pour les boutons
+        window.updateDashboard = updateDashboard;
 
         // Charger les données au démarrage
         updateDashboard();
