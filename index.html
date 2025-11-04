@@ -403,7 +403,16 @@
             const loginContainer = document.getElementById('loginContainer');
             const dashboardContainer = document.getElementById('dashboardContainer');
 
-            if (passwordInput.value === PASSWORD) {
+            if (!passwordInput) {
+                console.error('Password input not found');
+                return;
+            }
+
+            const enteredPassword = passwordInput.value;
+            console.log('Password entered:', enteredPassword);
+            console.log('Expected password:', PASSWORD);
+
+            if (enteredPassword === PASSWORD) {
                 sessionStorage.setItem('authenticated', 'true');
                 loginContainer.classList.remove('active');
                 dashboardContainer.classList.remove('hidden');
@@ -419,6 +428,9 @@
                 }, 3000);
             }
         }
+
+        // Rendre la fonction accessible globalement
+        window.checkPassword = checkPassword;
 
         // Permettre la connexion avec Enter
         document.addEventListener('DOMContentLoaded', function() {
