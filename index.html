@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard MailerLite - Objectif 20K</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -254,6 +255,28 @@
         .refresh-btn:active {
             transform: translateY(0);
         }
+
+        .chart-container {
+            background: rgba(30, 30, 30, 0.8);
+            padding: 30px;
+            border-radius: 16px;
+            margin-top: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .chart-title {
+            font-size: 14px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 20px;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
     </style>
 </head>
 <body>
@@ -312,6 +335,152 @@
             return Math.max(0, diffDays);
         }
 
+        // Gestion de l'historique quotidien
+        function getTodayKey() {
+            const today = new Date();
+            return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        }
+
+        function saveDailyData(subscriberCount) {
+            const todayKey = getTodayKey();
+            const history = JSON.parse(localStorage.getItem('emailHistory') || '{}');
+            history[todayKey] = subscriberCount;
+            localStorage.setItem('emailHistory', JSON.stringify(history));
+        }
+
+        function getDailyHistory() {
+            return JSON.parse(localStorage.getItem('emailHistory') || '{}');
+        }
+
+        function calculateDailyGrowth(current, previous) {
+            if (!previous) return 0;
+            return Math.max(0, current - previous);
+        }
+
+        let chartInstance = null;
+
+        function createChart(subscriberCount, remaining, daysToGoal) {
+            const history = getDailyHistory();
+            const today = new Date();
+            const todayKey = getTodayKey();
+            
+            // Sauvegarder le nombre actuel pour aujourd'hui
+            history[todayKey] = subscriberCount;
+            localStorage.setItem('emailHistory', JSON.stringify(history));
+
+            // Calculer les dates pour les 7 derniers jours + aujourd'hui
+            const labels = [];
+            const targetData = []; // Objectif quotidien (ligne grise)
+            const actualData = []; // Réel quotidien (ligne verte)
+
+            const dailyTarget = daysToGoal > 0 ? Math.ceil(remaining / daysToGoal) : 0;
+
+            // Générer les 7 derniers jours + aujourd'hui
+            for (let i = -7; i <= 0; i++) {
+                const date = new Date(today);
+                date.setDate(date.getDate() + i);
+                const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                const dateLabel = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+                
+                labels.push(dateLabel);
+                
+                // Objectif quotidien (ligne grise) - constant pour tous les jours
+                targetData.push(dailyTarget);
+                
+                // Réel quotidien (ligne verte) - calculer la différence avec le jour précédent
+                const prevDate = new Date(date);
+                prevDate.setDate(prevDate.getDate() - 1);
+                const prevKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-${String(prevDate.getDate()).padStart(2, '0')}`;
+                
+                const currentCount = history[dateKey] || (i === 0 ? subscriberCount : 0);
+                const prevCount = history[prevKey] || (i === -7 ? currentCount : 0);
+                
+                // Calculer le nombre d'emails collectés ce jour-là
+                const dailyGrowth = Math.max(0, currentCount - prevCount);
+                actualData.push(dailyGrowth);
+            }
+
+            const ctx = document.getElementById('dailyChart');
+            if (!ctx) return;
+
+            // Détruire le graphique précédent s'il existe
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Objectif quotidien',
+                            data: targetData,
+                            borderColor: '#666',
+                            backgroundColor: 'rgba(102, 102, 102, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#666',
+                        },
+                        {
+                            label: 'Réel quotidien',
+                            data: actualData,
+                            borderColor: '#01F38E',
+                            backgroundColor: 'rgba(1, 243, 142, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#01F38E',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#888',
+                                font: {
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(20, 20, 20, 0.9)',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            borderColor: '#01F38E',
+                            borderWidth: 1,
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#666',
+                                stepSize: 1
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#666'
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         async function updateDashboard() {
             const contentDiv = document.getElementById('content');
             
@@ -351,6 +520,13 @@
                         </div>
                     </div>
                     
+                    <div class="chart-container">
+                        <div class="chart-title">Emails par jour (7 derniers jours)</div>
+                        <div class="chart-wrapper">
+                            <canvas id="dailyChart"></canvas>
+                        </div>
+                    </div>
+                    
                     <div class="last-update">
                         <p>Dernière mise à jour: ${new Date().toLocaleString('fr-FR')}</p>
                         <button class="refresh-btn" onclick="updateDashboard()">Actualiser</button>
@@ -364,6 +540,11 @@
                         progressBar.style.width = `${percentage}%`;
                     }
                 }, 100);
+                
+                // Créer le graphique après un court délai pour s'assurer que le canvas est rendu
+                setTimeout(() => {
+                    createChart(subscriberCount, remaining, daysToGoal);
+                }, 200);
                 
             } catch (error) {
                 contentDiv.innerHTML = `
