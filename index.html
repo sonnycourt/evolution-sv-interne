@@ -301,22 +301,42 @@
         // Appel à la fonction Netlify serverless qui utilise les variables d'environnement
         async function fetchSubscriberCount() {
             try {
+                // Ajouter un timeout de 10 secondes
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                
                 const response = await fetch('/.netlify/functions/fetch-subscribers', {
                     method: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
                     },
+                    signal: controller.signal,
                 });
+                
+                clearTimeout(timeoutId);
 
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Erreur lors de la récupération des données');
+                    let errorMessage = 'Erreur lors de la récupération des données';
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.error || errorMessage;
+                    } catch (e) {
+                        errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
+                    }
+                    throw new Error(errorMessage);
                 }
 
                 const data = await response.json();
+                if (!data || typeof data.subscriberCount !== 'number') {
+                    throw new Error('Format de données invalide');
+                }
                 return data.subscriberCount;
             } catch (error) {
                 console.error('Erreur lors de la récupération des données:', error);
+                if (error.name === 'AbortError') {
+                    throw new Error('Timeout: La requête a pris trop de temps. Vérifie que la fonction Netlify est bien déployée.');
+                }
+                // Re-lancer l'erreur pour qu'elle soit gérée par updateDashboard
                 throw error;
             }
         }
@@ -514,6 +534,11 @@
         async function updateDashboard() {
             const contentDiv = document.getElementById('content');
             
+            if (!contentDiv) {
+                console.error('Element content non trouvé');
+                return;
+            }
+            
             try {
                 const subscriberCount = await fetchSubscriberCount();
                 const percentage = Math.min((subscriberCount / GOAL) * 100, 100);
@@ -577,11 +602,15 @@
                 }, 200);
                 
             } catch (error) {
+                console.error('Erreur dans updateDashboard:', error);
                 contentDiv.innerHTML = `
                     <div class="error">
                         <p>⚠️ Impossible de charger les données</p>
                         <p style="font-size: 12px; margin-top: 10px;">
                             ${error.message || 'Erreur inconnue'}
+                        </p>
+                        <p style="font-size: 11px; margin-top: 10px; color: #888;">
+                            Vérifie que les variables d'environnement MAILERLITE_API_KEY et MAILERLITE_GROUP_ID sont configurées dans Netlify.
                         </p>
                         <button class="refresh-btn" onclick="updateDashboard()">Réessayer</button>
                     </div>
