@@ -1,6 +1,6 @@
 # Dashboard MailerLite - Objectif 20K
 
-Dashboard pour suivre le nombre d'abonnés MailerLite avec un objectif de 20,000 abonnés.
+Dashboard pour suivre le nombre d'emails MailerLite avec un objectif de 20,000 emails.
 
 ## Configuration
 

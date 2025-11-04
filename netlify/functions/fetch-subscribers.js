@@ -45,7 +45,7 @@ exports.handler = async (event, context) => {
             }),
         };
     } catch (error) {
-        console.error('Erreur lors de la récupération des abonnés:', error);
+        console.error('Erreur lors de la récupération des emails:', error);
         
         return {
             statusCode: 500,
