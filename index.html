@@ -531,8 +531,40 @@
         function saveDailyData(subscriberCount) {
             const todayKey = getTodayKey();
             const history = JSON.parse(localStorage.getItem('emailHistory') || '{}');
-            history[todayKey] = subscriberCount;
-            localStorage.setItem('emailHistory', JSON.stringify(history));
+
+            // Ne sauvegarder que si c'est la première fois aujourd'hui
+            if (!history[todayKey]) {
+                // Calculer combien d'emails ont été ajoutés depuis la dernière sauvegarde
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayKey = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+
+                // Trouver le dernier nombre connu
+                let lastKnownCount = 0;
+                if (history[yesterdayKey]) {
+                    // Si on a les données d'hier, utiliser le total d'hier
+                    lastKnownCount = history[yesterdayKey].total || 0;
+                } else {
+                    // Chercher dans l'historique le dernier total connu
+                    const dates = Object.keys(history).sort();
+                    if (dates.length > 0) {
+                        const lastDate = dates[dates.length - 1];
+                        lastKnownCount = history[lastDate].total || 0;
+                    }
+                }
+
+                // Calculer les emails ajoutés aujourd'hui
+                const dailyGrowth = Math.max(0, subscriberCount - lastKnownCount);
+
+                // Sauvegarder pour aujourd'hui
+                history[todayKey] = {
+                    total: subscriberCount,
+                    daily: dailyGrowth,
+                    date: new Date().toISOString()
+                };
+
+                localStorage.setItem('emailHistory', JSON.stringify(history));
+            }
         }
 
         function getDailyHistory() {
@@ -550,14 +582,13 @@
             try {
                 const history = getDailyHistory();
                 const today = new Date();
-                today.setHours(0, 0, 0, 0); // Normaliser à minuit pour la comparaison
                 const todayKey = getTodayKey();
 
-                // Sauvegarder le nombre actuel pour aujourd'hui (sans écraser si déjà sauvegardé ce jour)
-                if (!history[todayKey] || history[todayKey] !== subscriberCount) {
-                    history[todayKey] = subscriberCount;
-                    localStorage.setItem('emailHistory', JSON.stringify(history));
-                }
+                // Sauvegarder les données du jour si nécessaire
+                saveDailyData(subscriberCount);
+
+                // Rafraîchir l'historique après sauvegarde
+                const updatedHistory = getDailyHistory();
 
                 // Période fixe : du 4 novembre 2025 au 4 décembre 2025
                 const startDate = new Date('2025-11-04T00:00:00');
@@ -584,44 +615,21 @@
                     // Objectif quotidien (ligne grise) - constant pour tous les jours
                     targetData.push(dailyTarget);
 
-                    // Calculer le nombre d'emails collectés ce jour-là
+                    // Récupérer les emails quotidiens directement depuis l'historique
                     let dailyGrowth = 0;
-
-                    // Récupérer le nombre total d'emails pour ce jour
-                    let currentCount = 0;
-                    if (dateKey === todayKey) {
-                        currentCount = subscriberCount;
-                    } else if (history[dateKey]) {
-                        currentCount = history[dateKey];
-                    }
-
-                    // Récupérer le nombre total d'emails du jour précédent
-                    let prevCount = 0;
-                    if (i > 0) {
-                        const prevDate = new Date(date);
-                        prevDate.setDate(prevDate.getDate() - 1);
-                        const prevKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-${String(prevDate.getDate()).padStart(2, '0')}`;
-
-                        if (prevKey === todayKey) {
-                            prevCount = subscriberCount;
-                        } else if (history[prevKey]) {
-                            prevCount = history[prevKey];
-                        } else {
-                            // Chercher dans l'historique pour trouver le dernier jour avec des données
-                            for (let j = i - 1; j >= 0; j--) {
-                                const checkDate = new Date(startDate);
-                                checkDate.setDate(checkDate.getDate() + j);
-                                const checkKey = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
-                                if (history[checkKey]) {
-                                    prevCount = history[checkKey];
-                                    break;
-                                }
-                            }
+                    if (updatedHistory[dateKey] && updatedHistory[dateKey].daily !== undefined) {
+                        // Utiliser les données quotidiennes sauvegardées
+                        dailyGrowth = updatedHistory[dateKey].daily;
+                    } else if (dateKey === todayKey) {
+                        // Pour aujourd'hui, si pas encore sauvegardé, calculer depuis la dernière sauvegarde connue
+                        let lastKnownTotal = 0;
+                        const dates = Object.keys(updatedHistory).sort();
+                        if (dates.length > 0) {
+                            const lastDate = dates[dates.length - 1];
+                            lastKnownTotal = updatedHistory[lastDate].total || 0;
                         }
+                        dailyGrowth = Math.max(0, subscriberCount - lastKnownTotal);
                     }
-
-                    // Le nombre d'emails collectés ce jour = total aujourd'hui - total hier
-                    dailyGrowth = Math.max(0, currentCount - prevCount);
 
                     actualData.push(dailyGrowth);
                 }
@@ -716,6 +724,11 @@
             });
             } catch (error) {
                 console.error('Erreur lors de la création du graphique:', error);
+                // En cas d'erreur, afficher au moins les données de base
+                const ctx = document.getElementById('dailyChart');
+                if (ctx) {
+                    ctx.parentElement.innerHTML = '<p style="color: #888; text-align: center;">Graphique temporairement indisponible</p>';
+                }
             }
         }
 
