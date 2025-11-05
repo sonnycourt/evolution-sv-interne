@@ -550,71 +550,89 @@
             try {
                 const history = getDailyHistory();
                 const today = new Date();
+                today.setHours(0, 0, 0, 0); // Normaliser à minuit pour la comparaison
                 const todayKey = getTodayKey();
                 
-                // Sauvegarder le nombre actuel pour aujourd'hui
-                history[todayKey] = subscriberCount;
-                localStorage.setItem('emailHistory', JSON.stringify(history));
+                // Sauvegarder le nombre actuel pour aujourd'hui (sans écraser si déjà sauvegardé ce jour)
+                // On ne sauvegarde que si on n'a pas déjà sauvegardé aujourd'hui OU si le nombre a changé
+                if (!history[todayKey] || history[todayKey] !== subscriberCount) {
+                    history[todayKey] = subscriberCount;
+                    localStorage.setItem('emailHistory', JSON.stringify(history));
+                }
 
                 // Période fixe : du 4 novembre 2025 au 4 décembre 2025
                 const startDate = new Date('2025-11-04T00:00:00');
                 const endDate = new Date('2025-12-04T22:00:00');
             
-            const labels = [];
-            const targetData = []; // Objectif quotidien (ligne grise)
-            const actualData = []; // Réel quotidien (ligne verte)
+                const labels = [];
+                const targetData = []; // Objectif quotidien (ligne grise)
+                const actualData = []; // Réel quotidien (ligne verte)
 
-            // Calculer le nombre total de jours dans la période
-            const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
-            const dailyTarget = daysToGoal > 0 ? Math.ceil(remaining / daysToGoal) : 0;
+                // Calculer le nombre total de jours dans la période
+                const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+                const dailyTarget = daysToGoal > 0 ? Math.ceil(remaining / daysToGoal) : 0;
 
-            // Générer toutes les dates de la période
-            for (let i = 0; i < totalDays; i++) {
-                const date = new Date(startDate);
-                date.setDate(date.getDate() + i);
-                const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                const dateLabel = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
-                
-                labels.push(dateLabel);
-                
-                // Objectif quotidien (ligne grise) - constant pour tous les jours
-                targetData.push(dailyTarget);
-                
-                // Réel quotidien (ligne verte) - calculer la différence avec le jour précédent
-                const prevDate = new Date(date);
-                prevDate.setDate(prevDate.getDate() - 1);
-                const prevKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-${String(prevDate.getDate()).padStart(2, '0')}`;
-                
-                // Si c'est aujourd'hui ou une date future, utiliser le nombre actuel
-                const isToday = dateKey === todayKey;
-                const isPast = date < today;
-                
-                // Récupérer le nombre d'emails pour ce jour
-                let currentCount = 0;
-                if (isToday) {
-                    currentCount = subscriberCount;
-                } else if (isPast && history[dateKey]) {
-                    currentCount = history[dateKey];
-                } else if (!isPast) {
-                    // Date future : pas encore de données
-                    currentCount = 0;
-                }
-                
-                // Calculer le nombre d'emails du jour précédent
-                let prevCount = 0;
-                if (i > 0) {
-                    // Récupérer le nombre du jour précédent
-                    if (prevKey === todayKey) {
-                        prevCount = subscriberCount;
-                    } else if (history[prevKey]) {
-                        prevCount = history[prevKey];
+                // Générer toutes les dates de la période
+                for (let i = 0; i < totalDays; i++) {
+                    const date = new Date(startDate);
+                    date.setDate(date.getDate() + i);
+                    date.setHours(0, 0, 0, 0); // Normaliser à minuit
+                    const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                    const dateLabel = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    
+                    labels.push(dateLabel);
+                    
+                    // Objectif quotidien (ligne grise) - constant pour tous les jours
+                    targetData.push(dailyTarget);
+                    
+                    // Calculer le nombre d'emails collectés ce jour-là
+                    let dailyGrowth = 0;
+                    
+                    // Récupérer le nombre total d'emails pour ce jour
+                    let currentCount = 0;
+                    if (dateKey === todayKey) {
+                        // Aujourd'hui : utiliser le nombre actuel
+                        currentCount = subscriberCount;
+                    } else if (history[dateKey]) {
+                        // Jour passé avec données : utiliser les données sauvegardées
+                        currentCount = history[dateKey];
                     }
+                    
+                    // Récupérer le nombre total d'emails du jour précédent
+                    let prevCount = 0;
+                    if (i > 0) {
+                        // Il y a un jour précédent
+                        const prevDate = new Date(date);
+                        prevDate.setDate(prevDate.getDate() - 1);
+                        const prevKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-${String(prevDate.getDate()).padStart(2, '0')}`;
+                        
+                        if (prevKey === todayKey) {
+                            // Le jour précédent est aujourd'hui (ne devrait pas arriver)
+                            prevCount = subscriberCount;
+                        } else if (history[prevKey]) {
+                            // Jour précédent avec données sauvegardées
+                            prevCount = history[prevKey];
+                        } else {
+                            // Pas de données pour le jour précédent : calculer à partir du jour précédent dans la boucle
+                            // On cherche le dernier jour avec des données avant celui-ci
+                            for (let j = i - 1; j >= 0; j--) {
+                                const checkDate = new Date(startDate);
+                                checkDate.setDate(checkDate.getDate() + j);
+                                const checkKey = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+                                if (history[checkKey]) {
+                                    prevCount = history[checkKey];
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Le nombre d'emails collectés ce jour = total aujourd'hui - total hier
+                    // Si c'est le premier jour et qu'on n'a pas de données précédentes, on montre 0
+                    dailyGrowth = Math.max(0, currentCount - prevCount);
+                    
+                    actualData.push(dailyGrowth);
                 }
-                
-                // Calculer le nombre d'emails collectés ce jour-là
-                const dailyGrowth = Math.max(0, currentCount - prevCount);
-                actualData.push(dailyGrowth);
-            }
 
                 const ctx = document.getElementById('dailyChart');
                 if (!ctx) {
