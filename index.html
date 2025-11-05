@@ -465,11 +465,11 @@
         window.checkPassword = checkPassword;
 
         // Appel à la fonction Netlify serverless qui utilise les variables d'environnement
-        async function fetchSubscriberCount() {
+        async function fetchSubscriberData() {
             try {
-                // Ajouter un timeout de 10 secondes
+                // Ajouter un timeout de 30 secondes (plus long car on récupère plus de données)
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                const timeoutId = setTimeout(() => controller.abort(), 30000);
                 
                 const response = await fetch('/.netlify/functions/fetch-subscribers', {
                     method: 'GET',
@@ -496,7 +496,10 @@
                 if (!data || typeof data.subscriberCount !== 'number') {
                     throw new Error('Format de données invalide');
                 }
-                return data.subscriberCount;
+                return {
+                    subscriberCount: data.subscriberCount,
+                    dailyCounts: data.dailyCounts || {}
+                };
             } catch (error) {
                 console.error('Erreur lors de la récupération des données:', error);
                 if (error.name === 'AbortError') {
@@ -546,7 +549,7 @@
 
         let chartInstance = null;
 
-        function createChart(subscriberCount, remaining, daysToGoal) {
+        function createChart(subscriberCount, remaining, daysToGoal, dailyCountsFromAPI) {
             try {
                 const history = getDailyHistory();
                 const today = new Date();
@@ -585,51 +588,46 @@
                     // Objectif quotidien (ligne grise) - constant pour tous les jours
                     targetData.push(dailyTarget);
                     
-                    // Calculer le nombre d'emails collectés ce jour-là
+                    // Utiliser les données de l'API si disponibles (basées sur les dates d'inscription réelles)
                     let dailyGrowth = 0;
                     
-                    // Récupérer le nombre total d'emails pour ce jour
-                    let currentCount = 0;
-                    if (dateKey === todayKey) {
-                        // Aujourd'hui : utiliser le nombre actuel
-                        currentCount = subscriberCount;
-                    } else if (history[dateKey]) {
-                        // Jour passé avec données : utiliser les données sauvegardées
-                        currentCount = history[dateKey];
-                    }
-                    
-                    // Récupérer le nombre total d'emails du jour précédent
-                    let prevCount = 0;
-                    if (i > 0) {
-                        // Il y a un jour précédent
-                        const prevDate = new Date(date);
-                        prevDate.setDate(prevDate.getDate() - 1);
-                        const prevKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-${String(prevDate.getDate()).padStart(2, '0')}`;
+                    if (dailyCountsFromAPI && dailyCountsFromAPI[dateKey]) {
+                        // Utiliser les données de l'API basées sur les dates d'inscription réelles
+                        dailyGrowth = dailyCountsFromAPI[dateKey];
+                    } else {
+                        // Fallback : calculer à partir de l'historique si l'API n'a pas de données
+                        let currentCount = 0;
+                        if (dateKey === todayKey) {
+                            currentCount = subscriberCount;
+                        } else if (history[dateKey]) {
+                            currentCount = history[dateKey];
+                        }
                         
-                        if (prevKey === todayKey) {
-                            // Le jour précédent est aujourd'hui (ne devrait pas arriver)
-                            prevCount = subscriberCount;
-                        } else if (history[prevKey]) {
-                            // Jour précédent avec données sauvegardées
-                            prevCount = history[prevKey];
-                        } else {
-                            // Pas de données pour le jour précédent : calculer à partir du jour précédent dans la boucle
-                            // On cherche le dernier jour avec des données avant celui-ci
-                            for (let j = i - 1; j >= 0; j--) {
-                                const checkDate = new Date(startDate);
-                                checkDate.setDate(checkDate.getDate() + j);
-                                const checkKey = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
-                                if (history[checkKey]) {
-                                    prevCount = history[checkKey];
-                                    break;
+                        let prevCount = 0;
+                        if (i > 0) {
+                            const prevDate = new Date(date);
+                            prevDate.setDate(prevDate.getDate() - 1);
+                            const prevKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-${String(prevDate.getDate()).padStart(2, '0')}`;
+                            
+                            if (prevKey === todayKey) {
+                                prevCount = subscriberCount;
+                            } else if (history[prevKey]) {
+                                prevCount = history[prevKey];
+                            } else {
+                                for (let j = i - 1; j >= 0; j--) {
+                                    const checkDate = new Date(startDate);
+                                    checkDate.setDate(checkDate.getDate() + j);
+                                    const checkKey = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+                                    if (history[checkKey]) {
+                                        prevCount = history[checkKey];
+                                        break;
+                                    }
                                 }
                             }
                         }
+                        
+                        dailyGrowth = Math.max(0, currentCount - prevCount);
                     }
-                    
-                    // Le nombre d'emails collectés ce jour = total aujourd'hui - total hier
-                    // Si c'est le premier jour et qu'on n'a pas de données précédentes, on montre 0
-                    dailyGrowth = Math.max(0, currentCount - prevCount);
                     
                     actualData.push(dailyGrowth);
                 }
@@ -736,7 +734,9 @@
             }
             
             try {
-                const subscriberCount = await fetchSubscriberCount();
+                const data = await fetchSubscriberData();
+                const subscriberCount = data.subscriberCount;
+                const dailyCountsFromAPI = data.dailyCounts;
                 const percentage = Math.min((subscriberCount / GOAL) * 100, 100);
                 const remaining = GOAL - subscriberCount;
                 const daysToGoal = calculateDaysToGoal();
@@ -795,7 +795,7 @@
                 // Créer le graphique après un court délai pour s'assurer que le canvas est rendu
                 setTimeout(() => {
                     try {
-                        createChart(subscriberCount, remaining, daysToGoal);
+                        createChart(subscriberCount, remaining, daysToGoal, dailyCountsFromAPI);
                     } catch (error) {
                         console.error('Erreur lors de la création du graphique:', error);
                     }
